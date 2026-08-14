@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ladataan kappaletietoja...</title>
+  <!-- hls.js mahdollistaa m3u8 (HLS) -streamien toiston kaikilla selaimilla -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #121212;
+      color: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #1e1e1e;
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+    .badge {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-size: 1.3rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      min-height: 2.8rem;
+      word-break: break-word;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      align-items: center;
+    }
+    button {
+      background: #ff4757;
+      color: white;
+      border: none;
+      padding: 0.8rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
+    }
+    button:hover {
+      background: #ff6b81;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    button.playing {
+      background: #2ed573;
+    }
+    .control-group {
+      width: 100%;
+      text-align: left;
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+    select, input[type="range"] {
+      width: 100%;
+      margin-top: 0.4rem;
+      box-sizing: border-box;
+    }
+    select {
+      background: #2c2c2c;
+      color: white;
+      border: 1px solid #444;
+      padding: 0.5rem;
+      border-radius: 6px;
+    }
+    input[type="range"] {
+      accent-color: #ff4757;
+      cursor: pointer;
+    }
+    .volume-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="badge" id="station-badge">Nyt soi (XFM)</div>
+    <h1 id="track-title">Ladataan...</h1>
+
+    <div class="controls">
+      <button id="play-btn">Toista</button>
+
+      <!-- Valikko radiokanaville -->
+      <div class="control-group">
+        <label for="station-select">Valitse kanava:</label>
+        <select id="station-select">
+          <option value="xfm">XFM</option>
+          <option value="loop">Loop</option>
+          <option value="top51">Top51</option>
+          <option value="seafm">Sea FM</option>
+        </select>
+      </div>
+
+      <!-- Volume-säädin -->
+      <div class="control-group">
+        <label for="volume-slider">Äänenvoimakkuus: <span id="volume-text">70%</span></label>
+        <div class="volume-container">
+          <input type="range" id="volume-slider" min="0" max="100" value="70">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Radiokanavien määrittelyt
+    const STATIONS = {
+      xfm: {
+        name: 'XFM',
+        streamUrl: 'https://stream1.rcast.net/73328',
+        apiUrl: 'https://xfm.ee/wp-json/xfm/v1/nowplaying?',
+        isHls: false,
+        parseTitle: (data) => data.title || 'Tuntematon kappale'
+      },
+      loop: {
+        name: 'Loop',
+        streamUrl: 'https://aud-stream-loop.nm-elemental.nelonenmedia.fi/playlist-256000.m3u8',
+        apiUrl: 'https://scraper2.onlineradiobox.com/fi.loop?l=0',
+        isHls: true,
+        parseTitle: (data) => data.title || 'Tuntematon kappale'
+      },
+      top51: {
+        name: 'Top51',
+        streamUrl: 'https://live-bauerfi.sharp-stream.com/fi_top51_64.aac?direct=true&aw_0_1st.playerid=BMUK_inpage_html5&aw_0_1st.skey=1786716290&aw_0_1st.bauer_loggedin=false&aw_0_req.userConsentV2=CQo74kAQo74kAAGABCENCrFsAP_gAEPAAApAJtQIgAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAMUAZwA_YCZAF5gMZAigBNoBFoA4ACgAHgCEAHcAQgAiIBFgCQkAsACoAHgAQQAyADQAJgAfgBsgDuAH6AYoBeYQACAEUdAMAAWABUAEEAMgA0ACYAH4AaIA2QB-gGKATIAvMeABAIiSgCgALACYANkAxQC8yEAQABYAfgB3AGKKQCwAFgAVABBADIANAAmAB-AGiANkAfoBigF5lQAIACi0AEAdwA.IJtQIwAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAIsAYoAzgB-wEyALzAYyBFACbQAAA.YAAAAAAAAAAA',
+        apiUrl: 'https://listenapi.planetradio.co.uk/api9.2/stations_nowplaying/FI?StationCode%5B%5D=tpf&premium=1',
+        isHls: false,
+        parseTitle: (data) => {
+          if (Array.isArray(data) && data[0]) {
+            const track = data[0].nowPlayingTrack || '';
+            const artist = data[0].nowPlayingArtist || '';
+            if (artist && track) return `${artist} - ${track}`;
+            return track || artist || 'Tuntematon kappale';
+          }
+          return 'Tuntematon kappale';
+        }
+      },
+      seafm: {
+        name: 'Sea FM',
+        streamUrl: 'https://s3.myradiostream.com:4976/listen.mp3?nocache=1786716495',
+        apiUrl: 'https://www.seafm.fi/?urltocheck=czMubXlyYWRpb3N0cmVhbS5jb20%3D&qtproxycall=MzZbLV1odHRwOi8vczMubXlyYWRpb3N0cmVhbS5jb206NDk3Ni9zdGF0cz9zaWQ9Jmpzb249MQ%3D%3D&qtdir=36&_=1786716479953',
+        isHls: false,
+        parseTitle: (data) => data.songtitle || 'Tuntematon kappale'
+      }
+    };
+
+    let currentStationKey = 'xfm';
+    let isPlaying = false;
+    let hls = null;
+
+    const trackTitleEl = document.getElementById('track-title');
+    const stationBadgeEl = document.getElementById('station-badge');
+    const playBtn = document.getElementById('play-btn');
+    const stationSelect = document.getElementById('station-select');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeText = document.getElementById('volume-text');
+
+    const audio = new Audio();
+    
+    // Asetetaan oletusvoimakkuus (70%)
+    audio.volume = 0.7;
+
+    // --- 1. Kappaletietojen haku ---
+    async function fetchNowPlaying() {
+      const station = STATIONS[currentStationKey];
+      try {
+        const response = await fetch(station.apiUrl);
+        if (!response.ok) throw new Error('Verkkovirhe');
+        
+        const data = await response.json();
+        const titleText = station.parseTitle(data);
+
+        document.title = `${titleText} - ${station.name}`;
+        trackTitleEl.textContent = titleText;
+      } catch (err) {
+        console.error('Kappaletietojen haku epäonnistui:', err);
+      }
+    }
+
+    // Päivitetään tiedot heti ja 60s välein
+    fetchNowPlaying();
+    setInterval(fetchNowPlaying, 60000);
+
+    // --- 2. Audion toisto & HLS-tuki (m3u8) ---
+    function playAudio() {
+      const station = STATIONS[currentStationKey];
+
+      // Jos kyseessä on HLS-stream (.m3u8) ja selain vaatii hls.js-kirjaston
+      if (station.isHls && Hls.isSupported()) {
+        if (!hls) {
+          hls = new Hls();
+        }
+        hls.loadSource(station.streamUrl);
+        hls.attachMedia(audio);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          audio.play();
+        });
+      } 
+      // Suora Safari-tuki m3u8:lle tai tavalliset mp3/aac-streamit
+      else {
+        if (hls) {
+          hls.destroy();
+          hls = null;
+        }
+        audio.src = station.streamUrl;
+        audio.play();
+      }
+
+      isPlaying = true;
+      playBtn.textContent = 'Pysäytä';
+      playBtn.classList.add('playing');
+    }
+
+    function stopAudio() {
+      audio.pause();
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      audio.src = ''; // Katkaistaan yhteys datan säästämiseksi
+      isPlaying = false;
+      playBtn.textContent = 'Toista';
+      playBtn.classList.remove('playing');
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (isPlaying) {
+        stopAudio();
+      } else {
+        playAudio();
+      }
+    });
+
+    // --- 3. Kanavan vaihto ---
+    stationSelect.addEventListener('change', (e) => {
+      currentStationKey = e.target.value;
+      const station = STATIONS[currentStationKey];
+      
+      stationBadgeEl.textContent = `Nyt soi (${station.name})`;
+      trackTitleEl.textContent = 'Ladataan...';
+      fetchNowPlaying();
+
+      if (isPlaying) {
+        stopAudio();
+        playAudio();
+      }
+    });
+
+    // --- 4. Äänenvoimakkuuden säätö ---
+    volumeSlider.addEventListener('input', (e) => {
+      const val = e.target.value;
+      audio.volume = val / 100;
+      volumeText.textContent = `${val}%`;
+    });
+  </script>
+</body>
+</html>
