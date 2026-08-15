@@ -127,6 +127,9 @@
   </div>
 
   <script>
+    // Apufunktio nopealle CORS-proxylle ilman timeout-ongelmia
+    const withCorsProxy = (url) => `https://api.cors.lol/?url=${encodeURIComponent(url)}`;
+
     // Radiokanavien määrittelyt
     const STATIONS = {
       xfm: {
@@ -146,7 +149,7 @@
       top51: {
         name: 'Top51',
         streamUrl: 'https://live-bauerfi.sharp-stream.com/fi_top51_64.aac?direct=true&aw_0_1st.playerid=BMUK_inpage_html5&aw_0_1st.skey=1786716290&aw_0_1st.bauer_loggedin=false&aw_0_req.userConsentV2=CQo74kAQo74kAAGABCENCrFsAP_gAEPAAApAJtQIgAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAMUAZwA_YCZAF5gMZAigBNoBFoA4ACgAHgCEAHcAQgAiIBFgCQkAsACoAHgAQQAyADQAJgAfgBsgDuAH6AYoBeYQACAEUdAMAAWABUAEEAMgA0ACYAH4AaIA2QB-gGKATIAvMeABAIiSgCgALACYANkAxQC8yEAQABYAfgB3AGKKQCwAFgAVABBADIANAAmAB-AGiANkAfoBigF5lQAIACi0AEAdwA.IJtQIwAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAIsAYoAzgB-wEyALzAYyBFACbQAAA.YAAAAAAAAAAA',
-        apiUrl: 'https://listenapi.planetradio.co.uk/api9.2/stations_nowplaying/FI?StationCode%5B%5D=tpf&premium=1',
+        apiUrl: withCorsProxy('https://listenapi.planetradio.co.uk/api9.2/stations_nowplaying/FI?StationCode%5B%5D=tpf&premium=1'),
         isHls: false,
         parseTitle: (data) => {
           if (Array.isArray(data) && data[0]) {
@@ -161,9 +164,13 @@
       seafm: {
         name: 'Sea FM',
         streamUrl: 'https://s3.myradiostream.com:4976/listen.mp3?nocache=1786716495',
-        apiUrl: 'https://www.seafm.fi/?urltocheck=czMubXlyYWRpb3N0cmVhbS5jb20%3D&qtproxycall=MzZbLV1odHRwOi8vczMubXlyYWRpb3N0cmVhbS5jb206NDk3Ni9zdGF0cz9zaWQ9Jmpzb249MQ%3D%3D&qtdir=36&_=1786716479953',
+        // Haetaan suoraan MyRadioStreamin taustarajapinnasta ilman seafm.fi-sivun turhaa latausta
+        apiUrl: withCorsProxy('https://s3.myradiostream.com:4976/stats?json=1'),
         isHls: false,
-        parseTitle: (data) => data.songtitle || 'Tuntematon kappale'
+        parseTitle: (data) => {
+          // MyRadioStream palauttaa songtitle-kentän suoraan stats JSON:issa
+          return data.songtitle || 'Tuntematon kappale';
+        }
       }
     };
 
@@ -179,8 +186,6 @@
     const volumeText = document.getElementById('volume-text');
 
     const audio = new Audio();
-    
-    // Asetetaan oletusvoimakkuus (70%)
     audio.volume = 0.7;
 
     // --- 1. Kappaletietojen haku ---
@@ -197,30 +202,23 @@
         trackTitleEl.textContent = titleText;
       } catch (err) {
         console.error('Kappaletietojen haku epäonnistui:', err);
+        trackTitleEl.textContent = 'Kappaletietoa ei saatavilla';
       }
     }
 
-    // Päivitetään tiedot heti ja 60s välein
     fetchNowPlaying();
     setInterval(fetchNowPlaying, 60000);
 
-    // --- 2. Audion toisto & HLS-tuki (m3u8) ---
+    // --- 2. Audion toisto ---
     function playAudio() {
       const station = STATIONS[currentStationKey];
 
-      // Jos kyseessä on HLS-stream (.m3u8) ja selain vaatii hls.js-kirjaston
       if (station.isHls && Hls.isSupported()) {
-        if (!hls) {
-          hls = new Hls();
-        }
+        if (!hls) hls = new Hls();
         hls.loadSource(station.streamUrl);
         hls.attachMedia(audio);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          audio.play();
-        });
-      } 
-      // Suora Safari-tuki m3u8:lle tai tavalliset mp3/aac-streamit
-      else {
+        hls.on(Hls.Events.MANIFEST_PARSED, () => audio.play());
+      } else {
         if (hls) {
           hls.destroy();
           hls = null;
@@ -240,18 +238,15 @@
         hls.destroy();
         hls = null;
       }
-      audio.src = ''; // Katkaistaan yhteys datan säästämiseksi
+      audio.src = '';
       isPlaying = false;
       playBtn.textContent = 'Toista';
       playBtn.classList.remove('playing');
     }
 
     playBtn.addEventListener('click', () => {
-      if (isPlaying) {
-        stopAudio();
-      } else {
-        playAudio();
-      }
+      if (isPlaying) stopAudio();
+      else playAudio();
     });
 
     // --- 3. Kanavan vaihto ---
@@ -269,7 +264,7 @@
       }
     });
 
-    // --- 4. Äänenvoimakkuuden säätö ---
+    // --- 4. Volume ---
     volumeSlider.addEventListener('input', (e) => {
       const val = e.target.value;
       audio.volume = val / 100;
