@@ -127,7 +127,6 @@
   </div>
 
   <script>
-    // Apufunktio nopealle CORS-proxylle ilman timeout-ongelmia
     const withCorsProxy = (url) => `https://api.cors.lol/?url=${encodeURIComponent(url)}`;
 
     // Radiokanavien määrittelyt
@@ -149,14 +148,15 @@
       top51: {
         name: 'Top51',
         streamUrl: 'https://live-bauerfi.sharp-stream.com/fi_top51_64.aac?direct=true&aw_0_1st.playerid=BMUK_inpage_html5&aw_0_1st.skey=1786716290&aw_0_1st.bauer_loggedin=false&aw_0_req.userConsentV2=CQo74kAQo74kAAGABCENCrFsAP_gAEPAAApAJtQIgAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAMUAZwA_YCZAF5gMZAigBNoBFoA4ACgAHgCEAHcAQgAiIBFgCQkAsACoAHgAQQAyADQAJgAfgBsgDuAH6AYoBeYQACAEUdAMAAWABUAEEAMgA0ACYAH4AaIA2QB-gGKATIAvMeABAIiSgCgALACYANkAxQC8yEAQABYAfgB3AGKKQCwAFgAVABBADIANAAmAB-AGiANkAfoBigF5lQAIACi0AEAdwA.IJtQIwAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAIsAYoAzgB-wEyALzAYyBFACbQAAA.YAAAAAAAAAAA',
-        apiUrl: withCorsProxy('https://listenapi.planetradio.co.uk/api9.2/stations_nowplaying/FI?StationCode%5B%5D=tpf&premium=1'),
+        apiUrl: 'https://api.instant.audio/data/playlist/116/radio-top51',
         isHls: false,
         parseTitle: (data) => {
-          if (Array.isArray(data) && data[0]) {
-            const track = data[0].nowPlayingTrack || '';
-            const artist = data[0].nowPlayingArtist || '';
-            if (artist && track) return `${artist} - ${track}`;
-            return track || artist || 'Tuntematon kappale';
+          if (data && data.success && Array.isArray(data.result) && data.result.length > 0) {
+            const currentTrack = data.result[0];
+            const artist = currentTrack.track_artist || '';
+            const title = currentTrack.track_title || '';
+            if (artist && title) return `${artist} - ${title}`;
+            return title || artist || 'Tuntematon kappale';
           }
           return 'Tuntematon kappale';
         }
@@ -164,13 +164,9 @@
       seafm: {
         name: 'Sea FM',
         streamUrl: 'https://s3.myradiostream.com:4976/listen.mp3?nocache=1786716495',
-        // Haetaan suoraan MyRadioStreamin taustarajapinnasta ilman seafm.fi-sivun turhaa latausta
         apiUrl: withCorsProxy('https://s3.myradiostream.com:4976/stats?json=1'),
         isHls: false,
-        parseTitle: (data) => {
-          // MyRadioStream palauttaa songtitle-kentän suoraan stats JSON:issa
-          return data.songtitle || 'Tuntematon kappale';
-        }
+        parseTitle: (data) => data.songtitle || 'Tuntematon kappale'
       }
     };
 
