@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ladataan kappaletietoja...</title>
-  <!-- hls.js mahdollistaa m3u8 (HLS) -streamien toiston kaikilla selaimilla -->
+  <title>Nettiradio</title>
+  <link id="dynamic-favicon" rel="shortcut icon" href="">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     body {
@@ -105,18 +105,17 @@
     <div class="controls">
       <button id="play-btn">Toista</button>
 
-      <!-- Valikko radiokanaville -->
       <div class="control-group">
         <label for="station-select">Valitse kanava:</label>
         <select id="station-select">
           <option value="xfm">XFM</option>
           <option value="loop">Loop</option>
-          <option value="top51">Top51</option>
+          <option value="hitmix">HitMix</option>
           <option value="seafm">Sea FM</option>
+          <option value="loop_edm">Loop EDM</option>
         </select>
       </div>
 
-      <!-- Volume-säädin -->
       <div class="control-group">
         <label for="volume-slider">Äänenvoimakkuus: <span id="volume-text">70%</span></label>
         <div class="volume-container">
@@ -127,52 +126,116 @@
   </div>
 
   <script>
-    const withCorsProxy = (url) => `https://api.cors.lol/?url=${encodeURIComponent(url)}`;
+    const faviconCache = {};
 
-    // Radiokanavien määrittelyt
     const STATIONS = {
       xfm: {
         name: 'XFM',
+        logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSAsgwI53dMGxsBQvFF6FVSJCthQMJP6CO_s7jthpqcLmf9SqPoiD_MqsS&s=10',
         streamUrl: 'https://stream1.rcast.net/73328',
         apiUrl: 'https://xfm.ee/wp-json/xfm/v1/nowplaying?',
         isHls: false,
-        parseTitle: (data) => data.title || 'Tuntematon kappale'
+        parseData: (data) => {
+          const rawTitle = data.title || 'Tuntematon kappale';
+          if (rawTitle.includes(' - ')) {
+            const [artist, title] = rawTitle.split(' - ');
+            return { artist: artist.trim(), title: title.trim() };
+          }
+          return { artist: 'XFM', title: rawTitle };
+        }
       },
       loop: {
         name: 'Loop',
+        logo: 'https://img.nm-ovp.nelonenmedia.fi/v1/novelist?src=%2Ffiles%2Fpromo-items%2Fsquare%2F2024%2FLoop_2560x2560.jpg&width=640&format=webp',
         streamUrl: 'https://aud-stream-loop.nm-elemental.nelonenmedia.fi/playlist-256000.m3u8',
         apiUrl: 'https://scraper2.onlineradiobox.com/fi.loop?l=0',
         isHls: true,
-        parseTitle: (data) => data.title || 'Tuntematon kappale'
-      },
-      top51: {
-        name: 'Top51',
-        streamUrl: 'https://live-bauerfi.sharp-stream.com/fi_top51_64.aac?direct=true&aw_0_1st.playerid=BMUK_inpage_html5&aw_0_1st.skey=1786716290&aw_0_1st.bauer_loggedin=false&aw_0_req.userConsentV2=CQo74kAQo74kAAGABCENCrFsAP_gAEPAAApAJtQIgAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAMUAZwA_YCZAF5gMZAigBNoBFoA4ACgAHgCEAHcAQgAiIBFgCQkAsACoAHgAQQAyADQAJgAfgBsgDuAH6AYoBeYQACAEUdAMAAWABUAEEAMgA0ACYAH4AaIA2QB-gGKATIAvMeABAIiSgCgALACYANkAxQC8yEAQABYAfgB3AGKKQCwAFgAVABBADIANAAmAB-AGiANkAfoBigF5lQAIACi0AEAdwA.IJtQIwAAwAKAAyAB4AIAAVAAyAB4AEAALQAZAA0AByAEWAJgAmgBbADmAH4AQAAggBCACgAGiANkAdwA_QCEAERAIsAYoAzgB-wEyALzAYyBFACbQAAA.YAAAAAAAAAAA',
-        apiUrl: 'https://api.instant.audio/data/playlist/116/radio-top51',
-        isHls: false,
-        parseTitle: (data) => {
-          if (data && data.success && Array.isArray(data.result) && data.result.length > 0) {
-            const currentTrack = data.result[0];
-            const artist = currentTrack.track_artist || '';
-            const title = currentTrack.track_title || '';
-            if (artist && title) return `${artist} - ${title}`;
-            return title || artist || 'Tuntematon kappale';
+        parseData: (data) => {
+          const rawTitle = data.title || 'Tuntematon kappale';
+          if (rawTitle.includes(' - ')) {
+            const [artist, title] = rawTitle.split(' - ');
+            return { artist: artist.trim(), title: title.trim() };
           }
-          return 'Tuntematon kappale';
+          return { artist: 'Loop', title: rawTitle };
+        }
+      },
+      hitmix: {
+        name: 'HitMix',
+        logo: 'https://img.nm-ovp.nelonenmedia.fi/v1/longbow?src=channel/6b0afe5c-1e86-4573-aa35-3e32c77dc35e/e4dd2a14-ecb5-4bd1-af86-6ac949026147.jpg&width=360&height=360',
+        streamUrl: 'https://aud-stream-hitmix.nm-elemental.nelonenmedia.fi/playlist-256000.m3u8',
+        apiUrl: 'https://scraper2.onlineradiobox.com/fi.hitmix?l=0',
+        isHls: true,
+        parseData: (data) => {
+          const artist = data.iArtist || 'HitMix';
+          const title = data.iName || data.title || 'Tuntematon kappale';
+          return { artist: artist.trim(), title: title.trim() };
         }
       },
       seafm: {
         name: 'Sea FM',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/2/23/Logo-boxed-500x500.jpg?utm_source=fi.wikipedia.org&utm_campaign=index&utm_content=original',
         streamUrl: 'https://s3.myradiostream.com:4976/listen.mp3?nocache=1786716495',
-        apiUrl: withCorsProxy('https://s3.myradiostream.com:4976/stats?json=1'),
+        fetchCustom: async (signal) => {
+          const rawTarget = 'http://s3.myradiostream.com:4976/stats?json=1';
+          
+          try {
+            const codetabsUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rawTarget)}`;
+            const res = await fetch(codetabsUrl, { signal });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && (data.songtitle || data.title)) return data;
+            }
+          } catch (e) {
+            if (e.name === 'AbortError') throw e;
+          }
+
+          try {
+            const corsProxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(rawTarget)}&key=478b4042`;
+            const res = await fetch(corsProxyUrl, { signal });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && (data.songtitle || data.title)) return data;
+            }
+          } catch (e) {
+            if (e.name === 'AbortError') throw e;
+          }
+
+          return null;
+        },
         isHls: false,
-        parseTitle: (data) => data.songtitle || 'Tuntematon kappale'
+        parseData: (data) => {
+          if (!data) return { artist: 'Sea FM', title: 'Kappaletietoa ei saatavilla' };
+          const rawTitle = data.songtitle || data.title || 'Tuntematon kappale';
+          if (rawTitle.includes(' - ')) {
+            const [artist, title] = rawTitle.split(' - ');
+            return { artist: artist.trim(), title: title.trim() };
+          }
+          return { artist: 'Sea FM', title: rawTitle };
+        }
+      },
+      loop_edm: {
+        name: 'Loop EDM',
+        logo: 'https://images.zeno.fm/Mje0DpMw6ArW-lMq2iBTT4rh7JxhY1KGe9fe3gKBcHA/rs:fill:152:152/q:75/g:ce:0:0/aHR0cHM6Ly9wcm94eS56ZW5vLmZtL2NvbnRlbnQvc3RhdGlvbnMvZTlkMTBjM2ItYzNhMC00YzlkLWEwYjItNmM2ZmQ2ZDkxZGJmL2ltYWdlLz91PTE3Njk3NTUzNTcwMDA',
+        streamUrl: 'https://ext-stream-pl10.nm-elemental.nelonenmedia.fi/HEE/fragments/index-128k.m3u8',
+        apiUrl: 'https://scraper2.onlineradiobox.com/fi.loopedm?l=0',
+        isHls: true,
+        parseData: (data) => {
+          const rawTitle = data.title || 'Tuntematon kappale';
+          if (rawTitle.includes(' - ')) {
+            const [artist, title] = rawTitle.split(' - ');
+            return { artist: artist.trim(), title: title.trim() };
+          }
+          return { artist: 'Loop EDM', title: rawTitle };
+        }
       }
     };
 
+    const stationKeys = Object.keys(STATIONS);
     let currentStationKey = 'xfm';
     let isPlaying = false;
     let hls = null;
+    let metadataInterval = null;
+    let fetchController = null; // Estää vanhojen pyyntöjen vuotamisen uussille kanaville
 
     const trackTitleEl = document.getElementById('track-title');
     const stationBadgeEl = document.getElementById('station-badge');
@@ -184,48 +247,151 @@
     const audio = new Audio();
     audio.volume = 0.7;
 
-    // --- 1. Kappaletietojen haku ---
-    async function fetchNowPlaying() {
-      const station = STATIONS[currentStationKey];
-      try {
-        const response = await fetch(station.apiUrl);
-        if (!response.ok) throw new Error('Verkkovirhe');
-        
-        const data = await response.json();
-        const titleText = station.parseTitle(data);
-
-        document.title = `${titleText} - ${station.name}`;
-        trackTitleEl.textContent = titleText;
-      } catch (err) {
-        console.error('Kappaletietojen haku epäonnistui:', err);
-        trackTitleEl.textContent = 'Kappaletietoa ei saatavilla';
+    function setUIPlayingState(playing) {
+      isPlaying = playing;
+      if (playing) {
+        playBtn.textContent = 'Pysäytä';
+        playBtn.classList.add('playing');
+      } else {
+        playBtn.textContent = 'Toista';
+        playBtn.classList.remove('playing');
       }
     }
 
-    fetchNowPlaying();
-    setInterval(fetchNowPlaying, 60000);
+    audio.addEventListener('play', () => setUIPlayingState(true));
+    audio.addEventListener('pause', () => setUIPlayingState(false));
 
-    // --- 2. Audion toisto ---
-    function playAudio() {
-      const station = STATIONS[currentStationKey];
+    audio.addEventListener('error', (e) => {
+      console.error('Audio playback error:', e);
+      stopAudio();
+    });
 
-      if (station.isHls && Hls.isSupported()) {
-        if (!hls) hls = new Hls();
-        hls.loadSource(station.streamUrl);
-        hls.attachMedia(audio);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => audio.play());
-      } else {
-        if (hls) {
-          hls.destroy();
-          hls = null;
+    function setOptimizedFavicon(stationKey, imageUrl) {
+      const link = document.getElementById('dynamic-favicon');
+      if (faviconCache[stationKey]) {
+        link.href = faviconCache[stationKey];
+        return;
+      }
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.src = imageUrl;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 16;
+        canvas.height = 16;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 16, 16);
+        const dataUrl = canvas.toDataURL('image/png');
+        faviconCache[stationKey] = dataUrl;
+        link.href = dataUrl;
+      };
+      img.onerror = () => { link.href = imageUrl; };
+    }
+
+    function updateMetadata(stationKey, trackInfo) {
+      // Varmistetaan vielä varmuuden vuoksi, että päivitettävä kanava on yhä valittuna
+      if (currentStationKey !== stationKey) return;
+
+      const station = STATIONS[stationKey];
+      document.title = `${trackInfo.artist} - ${trackInfo.title} | ${station.name}`;
+      trackTitleEl.textContent = `${trackInfo.artist} - ${trackInfo.title}`;
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: trackInfo.title,
+          artist: trackInfo.artist,
+          album: station.name,
+          artwork: [{ src: station.logo, sizes: '512x512', type: 'image/png' }]
+        });
+      }
+    }
+
+    async function fetchNowPlaying() {
+      // Peruutetaan edellinen aktiivinen fetch-pyyntö heti uuden haun alkaessa
+      if (fetchController) {
+        fetchController.abort();
+      }
+      fetchController = new AbortController();
+      const signal = fetchController.signal;
+
+      const targetStationKey = currentStationKey;
+      const station = STATIONS[targetStationKey];
+      let trackInfo = { artist: station.name, title: 'Kappaletietoa ei saatavilla' };
+
+      try {
+        if (station.fetchCustom) {
+          const data = await station.fetchCustom(signal);
+          if (data && currentStationKey === targetStationKey) {
+            trackInfo = station.parseData(data);
+          }
+        } else if (station.apiUrl) {
+          const response = await fetch(station.apiUrl, { signal });
+          if (response.ok) {
+            const data = await response.json();
+            if (data && currentStationKey === targetStationKey) {
+              trackInfo = station.parseData(data);
+            }
+          }
         }
-        audio.src = station.streamUrl;
-        audio.play();
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          return; // Pyyntö peruutettiin tarkoituksella kanavan vaihdon vuoksi
+        }
+        console.error(`Metadata haku epäonnistui kanavalle ${station.name}:`, err);
       }
 
-      isPlaying = true;
-      playBtn.textContent = 'Pysäytä';
-      playBtn.classList.add('playing');
+      if (currentStationKey === targetStationKey) {
+        updateMetadata(targetStationKey, trackInfo);
+      }
+    }
+
+    function startMetadataInterval() {
+      if (metadataInterval) clearInterval(metadataInterval);
+      
+      const station = STATIONS[currentStationKey];
+      setOptimizedFavicon(currentStationKey, station.logo);
+      
+      fetchNowPlaying();
+      metadataInterval = setInterval(fetchNowPlaying, 30000);
+    }
+
+    async function playAudio() {
+      const station = STATIONS[currentStationKey];
+      
+      stopAudio();
+
+      if (station.isHls) {
+        if (Hls.isSupported()) {
+          if (hls) hls.destroy();
+          hls = new Hls();
+          hls.loadSource(station.streamUrl);
+          hls.attachMedia(audio);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            audio.play().catch(e => {
+              console.error("HLS Playback failed:", e);
+              setUIPlayingState(false);
+            });
+          });
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+          audio.src = station.streamUrl;
+          try {
+            await audio.play();
+          } catch (e) {
+            console.error("Native HLS Playback failed:", e);
+            setUIPlayingState(false);
+          }
+        } else {
+            alert("Selaimesi ei tue HLS-toistoa.");
+        }
+      } else {
+        audio.src = station.streamUrl;
+        try {
+          await audio.play();
+        } catch (e) {
+          console.error("Direct Playback failed:", e);
+          setUIPlayingState(false);
+        }
+      }
     }
 
     function stopAudio() {
@@ -235,37 +401,67 @@
         hls = null;
       }
       audio.src = '';
-      isPlaying = false;
-      playBtn.textContent = 'Toista';
-      playBtn.classList.remove('playing');
+      setUIPlayingState(false);
     }
 
-    playBtn.addEventListener('click', () => {
-      if (isPlaying) stopAudio();
-      else playAudio();
-    });
+    function switchStation(newKey) {
+      const wasPlaying = isPlaying;
+      stopAudio();
 
-    // --- 3. Kanavan vaihto ---
-    stationSelect.addEventListener('change', (e) => {
-      currentStationKey = e.target.value;
+      // Keskeytetään heti mahdolliset taustalla roikkuvat Sea FM:n tai muiden pyynnöt
+      if (fetchController) {
+        fetchController.abort();
+        fetchController = null;
+      }
+
+      currentStationKey = newKey;
+      stationSelect.value = currentStationKey;
       const station = STATIONS[currentStationKey];
       
       stationBadgeEl.textContent = `Nyt soi (${station.name})`;
       trackTitleEl.textContent = 'Ladataan...';
-      fetchNowPlaying();
+      
+      startMetadataInterval();
 
+      if (wasPlaying) {
+        playAudio();
+      }
+    }
+
+    playBtn.addEventListener('click', () => {
       if (isPlaying) {
         stopAudio();
+      } else {
         playAudio();
       }
     });
 
-    // --- 4. Volume ---
+    stationSelect.addEventListener('change', (e) => {
+      switchStation(e.target.value);
+    });
+
     volumeSlider.addEventListener('input', (e) => {
       const val = e.target.value;
       audio.volume = val / 100;
       volumeText.textContent = `${val}%`;
     });
+
+    startMetadataInterval();
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('play', () => playAudio());
+      navigator.mediaSession.setActionHandler('pause', () => stopAudio());
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        const currentIndex = stationKeys.indexOf(currentStationKey);
+        const nextIndex = (currentIndex + 1) % stationKeys.length;
+        switchStation(stationKeys[nextIndex]);
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        const currentIndex = stationKeys.indexOf(currentStationKey);
+        const prevIndex = (currentIndex - 1 + stationKeys.length) % stationKeys.length;
+        switchStation(stationKeys[prevIndex]);
+      });
+    }
   </script>
 </body>
 </html>
