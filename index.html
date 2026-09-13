@@ -111,6 +111,7 @@
           <option value="xfm">XFM</option>
           <option value="loop">Loop</option>
           <option value="hitmix">HitMix</option>
+          <option value="popfm">Pop FM</option>
           <option value="seafm">Sea FM</option>
           <option value="loop_edm">Loop EDM</option>
         </select>
@@ -171,47 +172,30 @@
           return { artist: artist.trim(), title: title.trim() };
         }
       },
+      popfm: {
+        name: 'Pop FM',
+        logo: 'https://assets.radioplayer.org/246/246239/600/600/m9sgifkv.jpeg',
+        streamUrl: 'https://n14-eu.rcs.revma.com/hr92cvyzz2nwv?rj-ttl=5&rj-tok=AAABoJpCKyIAin8rbq7rpLoUEg',
+        apiUrl: 'https://scraper2.onlineradiobox.com/fi.pop?l=0',
+        isHls: false,
+        parseData: (data) => {
+          const artist = data.iArtist || 'Pop FM';
+          const title = data.iName || data.title || 'Tuntematon kappale';
+          return { artist: artist.trim(), title: title.trim() };
+        }
+      },
       seafm: {
         name: 'Sea FM',
         logo: 'https://upload.wikimedia.org/wikipedia/commons/2/23/Logo-boxed-500x500.jpg?utm_source=fi.wikipedia.org&utm_campaign=index&utm_content=original',
         streamUrl: 'https://s3.myradiostream.com:4976/listen.mp3?nocache=1786716495',
-        fetchCustom: async (signal) => {
-          const rawTarget = 'http://s3.myradiostream.com:4976/stats?json=1';
-          
-          try {
-            const codetabsUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rawTarget)}`;
-            const res = await fetch(codetabsUrl, { signal });
-            if (res.ok) {
-              const data = await res.json();
-              if (data && (data.songtitle || data.title)) return data;
-            }
-          } catch (e) {
-            if (e.name === 'AbortError') throw e;
-          }
-
-          try {
-            const corsProxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(rawTarget)}&key=478b4042`;
-            const res = await fetch(corsProxyUrl, { signal });
-            if (res.ok) {
-              const data = await res.json();
-              if (data && (data.songtitle || data.title)) return data;
-            }
-          } catch (e) {
-            if (e.name === 'AbortError') throw e;
-          }
-
-          return null;
-        },
+	apiUrl: 'https://scraper2.onlineradiobox.com/fi.sea?l=0',
         isHls: false,
         parseData: (data) => {
-          if (!data) return { artist: 'Sea FM', title: 'Kappaletietoa ei saatavilla' };
-          const rawTitle = data.songtitle || data.title || 'Tuntematon kappale';
-          if (rawTitle.includes(' - ')) {
-            const [artist, title] = rawTitle.split(' - ');
-            return { artist: artist.trim(), title: title.trim() };
-          }
-          return { artist: 'Sea FM', title: rawTitle };
+          const artist = data.iArtist || 'Sea FM';
+          const title = data.iName || data.title || 'Tuntematon kappale';
+          return { artist: artist.trim(), title: title.trim() };
         }
+
       },
       loop_edm: {
         name: 'Loop EDM',
@@ -235,7 +219,7 @@
     let isPlaying = false;
     let hls = null;
     let metadataInterval = null;
-    let fetchController = null; // Estää vanhojen pyyntöjen vuotamisen uussille kanaville
+    let fetchController = null;
 
     const trackTitleEl = document.getElementById('track-title');
     const stationBadgeEl = document.getElementById('station-badge');
@@ -289,7 +273,6 @@
     }
 
     function updateMetadata(stationKey, trackInfo) {
-      // Varmistetaan vielä varmuuden vuoksi, että päivitettävä kanava on yhä valittuna
       if (currentStationKey !== stationKey) return;
 
       const station = STATIONS[stationKey];
@@ -301,13 +284,12 @@
           title: trackInfo.title,
           artist: trackInfo.artist,
           album: station.name,
-          artwork: [{ src: station.logo, sizes: '512x512', type: 'image/png' }]
+          artwork: [{ src: station.logo, sizes: '600x600', type: 'image/jpeg' }]
         });
       }
     }
 
     async function fetchNowPlaying() {
-      // Peruutetaan edellinen aktiivinen fetch-pyyntö heti uuden haun alkaessa
       if (fetchController) {
         fetchController.abort();
       }
@@ -335,7 +317,7 @@
         }
       } catch (err) {
         if (err.name === 'AbortError') {
-          return; // Pyyntö peruutettiin tarkoituksella kanavan vaihdon vuoksi
+          return;
         }
         console.error(`Metadata haku epäonnistui kanavalle ${station.name}:`, err);
       }
@@ -408,7 +390,6 @@
       const wasPlaying = isPlaying;
       stopAudio();
 
-      // Keskeytetään heti mahdolliset taustalla roikkuvat Sea FM:n tai muiden pyynnöt
       if (fetchController) {
         fetchController.abort();
         fetchController = null;
