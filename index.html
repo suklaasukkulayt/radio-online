@@ -137,12 +137,12 @@
         apiUrl: 'https://xfm.ee/wp-json/xfm/v1/nowplaying?',
         isHls: false,
         parseData: (data) => {
-          const rawTitle = data.title || 'Tuntematon kappale';
+          const rawTitle = data.title || '';
           if (rawTitle.includes(' - ')) {
             const [artist, title] = rawTitle.split(' - ');
             return { artist: artist.trim(), title: title.trim() };
           }
-          return { artist: 'XFM', title: rawTitle };
+          return { artist: '', title: rawTitle.trim() || 'Kappaletietoa ei saatavilla' };
         }
       },
       loop: {
@@ -152,12 +152,12 @@
         apiUrl: 'https://scraper2.onlineradiobox.com/fi.loop?l=0',
         isHls: true,
         parseData: (data) => {
-          const rawTitle = data.title || 'Tuntematon kappale';
+          const rawTitle = data.title || '';
           if (rawTitle.includes(' - ')) {
             const [artist, title] = rawTitle.split(' - ');
             return { artist: artist.trim(), title: title.trim() };
           }
-          return { artist: 'Loop', title: rawTitle };
+          return { artist: '', title: rawTitle.trim() || 'Kappaletietoa ei saatavilla' };
         }
       },
       hitmix: {
@@ -167,9 +167,9 @@
         apiUrl: 'https://scraper2.onlineradiobox.com/fi.hitmix?l=0',
         isHls: true,
         parseData: (data) => {
-          const artist = data.iArtist || 'HitMix';
-          const title = data.iName || data.title || 'Tuntematon kappale';
-          return { artist: artist.trim(), title: title.trim() };
+          const artist = data.iArtist || '';
+          const title = data.iName || data.title || '';
+          return { artist: artist.trim(), title: title.trim() || 'Kappaletietoa ei saatavilla' };
         }
       },
       popfm: {
@@ -179,23 +179,22 @@
         apiUrl: 'https://scraper2.onlineradiobox.com/fi.pop?l=0',
         isHls: false,
         parseData: (data) => {
-          const artist = data.iArtist || 'Pop FM';
-          const title = data.iName || data.title || 'Tuntematon kappale';
-          return { artist: artist.trim(), title: title.trim() };
+          const artist = data.iArtist || '';
+          const title = data.iName || data.title || '';
+          return { artist: artist.trim(), title: title.trim() || 'Kappaletietoa ei saatavilla' };
         }
       },
       seafm: {
         name: 'Sea FM',
         logo: 'https://upload.wikimedia.org/wikipedia/commons/2/23/Logo-boxed-500x500.jpg?utm_source=fi.wikipedia.org&utm_campaign=index&utm_content=original',
         streamUrl: 'https://s3.myradiostream.com:4976/listen.mp3?nocache=1786716495',
-	apiUrl: 'https://scraper2.onlineradiobox.com/fi.sea?l=0',
+        apiUrl: 'https://scraper2.onlineradiobox.com/fi.sea?l=0',
         isHls: false,
         parseData: (data) => {
-          const artist = data.iArtist || 'Sea FM';
-          const title = data.iName || data.title || 'Tuntematon kappale';
-          return { artist: artist.trim(), title: title.trim() };
+          const artist = data.iArtist || '';
+          const title = data.iName || data.title || '';
+          return { artist: artist.trim(), title: title.trim() || 'Kappaletietoa ei saatavilla' };
         }
-
       },
       loop_edm: {
         name: 'Loop EDM',
@@ -204,12 +203,12 @@
         apiUrl: 'https://scraper2.onlineradiobox.com/fi.loopedm?l=0',
         isHls: true,
         parseData: (data) => {
-          const rawTitle = data.title || 'Tuntematon kappale';
+          const rawTitle = data.title || '';
           if (rawTitle.includes(' - ')) {
             const [artist, title] = rawTitle.split(' - ');
             return { artist: artist.trim(), title: title.trim() };
           }
-          return { artist: 'Loop EDM', title: rawTitle };
+          return { artist: '', title: rawTitle.trim() || 'Kappaletietoa ei saatavilla' };
         }
       }
     };
@@ -243,9 +242,17 @@
     }
 
     audio.addEventListener('play', () => setUIPlayingState(true));
-    audio.addEventListener('pause', () => setUIPlayingState(false));
+    audio.addEventListener('pause', () => {
+      setUIPlayingState(false);
+      if (audio.src) {
+        audio.removeAttribute('src');
+        audio.load();
+      }
+    });
 
     audio.addEventListener('error', (e) => {
+      if (!audio.src || audio.src === window.location.href) return;
+      
       console.error('Audio playback error:', e);
       stopAudio();
     });
@@ -276,13 +283,15 @@
       if (currentStationKey !== stationKey) return;
 
       const station = STATIONS[stationKey];
-      document.title = `${trackInfo.artist} - ${trackInfo.title} | ${station.name}`;
-      trackTitleEl.textContent = `${trackInfo.artist} - ${trackInfo.title}`;
+      const displayText = trackInfo.artist ? `${trackInfo.artist} - ${trackInfo.title}` : trackInfo.title;
+
+      document.title = `${displayText} | ${station.name}`;
+      trackTitleEl.textContent = displayText;
 
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: trackInfo.title,
-          artist: trackInfo.artist,
+          artist: trackInfo.artist || station.name,
           album: station.name,
           artwork: [{ src: station.logo, sizes: '600x600', type: 'image/jpeg' }]
         });
@@ -298,7 +307,7 @@
 
       const targetStationKey = currentStationKey;
       const station = STATIONS[targetStationKey];
-      let trackInfo = { artist: station.name, title: 'Kappaletietoa ei saatavilla' };
+      let trackInfo = { artist: '', title: 'Kappaletietoa ei saatavilla' };
 
       try {
         if (station.fetchCustom) {
@@ -382,7 +391,8 @@
         hls.destroy();
         hls = null;
       }
-      audio.src = '';
+      audio.removeAttribute('src');
+      audio.load();
       setUIPlayingState(false);
     }
 
